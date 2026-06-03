@@ -77,7 +77,7 @@ def parse_list_expression(list_expression):
     return [start + i * step for i in range(n_values)]
 
 
-def convert_dicom_to_ormirmids(input_folder, output_folder, anonymize='anon', recursive=True, session='', series_number=False, save_patient_json=True, save_extra_json=True):
+def convert_dicom_to_ormirmids(input_folder, output_folder, anonymize='anon', recursive=True, session='', series_number=False, save_patient_json=True, save_extra_json=True, overwrite_existing=True):
     """
     Convert DICOM to ORMIR-MIDS format.
     
@@ -86,6 +86,7 @@ def convert_dicom_to_ormirmids(input_folder, output_folder, anonymize='anon', re
     - output_folder (str): Path to the output folder where results will be saved.
     - anonymize (str): Pseudonym for patient name (default: 'anon').
     - recursive (bool): Whether to recurse into subfolders (default: True).
+    - overwrite_existing (bool): Whether to overwrite existing files (default: True)
     """
     
     inputDir = input_folder
@@ -240,17 +241,27 @@ def convert_dicom_to_ormirmids(input_folder, output_folder, anonymize='anon', re
                             [get_raw_tag_value(x, '00200011')[0] for x in multiseries_volumes[series_group_name]])
                         series_prefix = f'{first_series:03d}_'
 
-                    save_omids(
-                        str(output_path / (series_prefix + converter_class.get_file_name(patient_name))) + '.nii.gz',
-                        converted_multiseries_volume, save_patient_json, save_extra_json)
+                    nii_file = str(output_path / (series_prefix + converter_class.get_file_name(patient_name))) + '.nii.gz'
+
+                    if os.path.exists(nii_file) and not overwrite_existing:
+                        print('File already exists')
+                        return False
+
+                    save_omids(nii_file, converted_multiseries_volume, save_patient_json, save_extra_json)
                     print('Volume', med_volume.path, converted_multiseries_volume.shape, 'saved with', converter_class.get_name(), 'using multiseries concatenation')
                     return True # we successfully converted the multiseries volume
 
             series_prefix = ''
             if ADD_SERIES_NUMBER:
                 series_prefix = f'{get_raw_tag_value(med_volume, "00200011")[0]:03d}_'
-            save_omids(str(output_path / (series_prefix + converter_class.get_file_name(patient_name))) + '.nii.gz',
-                       converted_volume, save_patient_json, save_extra_json)
+
+            nii_file = str(output_path / (series_prefix + converter_class.get_file_name(patient_name))) + '.nii.gz'
+
+            if os.path.exists(nii_file) and not overwrite_existing:
+                print('File already exists')
+                return False
+
+            save_omids(nii_file, converted_volume, save_patient_json, save_extra_json, overwrite_existing)
             print('Volume', med_volume.volume.shape, med_volume.path, 'saved with', converter_class.get_name())
             return True # we successfully converted the volume
 
@@ -296,6 +307,7 @@ def main():
     parser.add_argument('--disable-extra-json', '-e', action='store_true', help='Avoid saving extra json file')
     parser.add_argument('--session', metavar='session_id', type=str, nargs=1,
                         help='Specify the session ID to use (default: none)')
+    parser.add_argument('--no-overwrite', action='store_false', help='Overwrite existing files')
 
     args = parser.parse_args()
 
@@ -308,7 +320,9 @@ def main():
         SESSION = args.session[0]
     else:
         SESSION = None
-    convert_dicom_to_ormirmids(inputDir, outputDir, ANON_NAME, RECURSIVE, SESSION, ADD_SERIES_NUMBER, not args.disable_patient_json, not args.disable_extra_json)
+    OVERWRITE_EXISTING = not args.no_overwrite
+
+    convert_dicom_to_ormirmids(inputDir, outputDir, ANON_NAME, RECURSIVE, SESSION, ADD_SERIES_NUMBER, not args.disable_patient_json, not args.disable_extra_json, OVERWRITE_EXISTING)
 
 
 # if __name__ == "__main__":
